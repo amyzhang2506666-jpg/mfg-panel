@@ -10,7 +10,13 @@
       "Bash(node -e \"const d=require\\('./data/data.json'\\); const us=d.regions[0]; console.log\\(JSON.stringify\\(us.industry,null,1\\)\\); console.log\\('chinaImport:',JSON.stringify\\(us.chinaImport\\)\\); const de=d.regions[1]; console.log\\('DE 工业增加值:',JSON.stringify\\(de.macro.find\\(x=>x.nm==='工业增加值'\\)\\)\\); console.log\\('DE 粗钢:',JSON.stringify\\(de.industry[0]\\)\\); console.log\\('VN chinaImport:',JSON.stringify\\(d.regions[3].chinaImport\\)\\);\")",
       "mcp__Claude_Preview__preview_start",
       "Bash(git init *)",
-      "Bash(git add *)"
+      "Bash(git add *)",
+      "Bash(git rm *)",
+      "Bash(git commit -q -m ' *)",
+      "Bash(git config *)",
+      "Bash(ls \"C:/Users/wenpe/.claude/projects/\" 2>/dev/null | head; echo \"===\"; find \"C:/Users/wenpe/.claude/projects\" -maxdepth 1 -type d 2>/dev/null | head)",
+      "Bash(node /tmp/r7.mjs)",
+      "Bash(node -e \"const d=require\\('./data/data.json'\\); for\\(const r of d.regions\\){const cells=[...r.industry,...r.macro,...r.driver]; const a=cells.filter\\(c=>c.auto\\).length; console.log\\(r.name.padEnd\\(10\\), 'auto', a+'/'+cells.length, '| CLI:', JSON.stringify\\(r.macro.find\\(x=>x.nm==='景气先行CLI'\\)?.value\\), '| 出口:', JSON.stringify\\(r.driver.find\\(x=>x.nm==='出口外需'\\)?.value\\), '| 实际利率:', JSON.stringify\\(r.macro.find\\(x=>x.nm==='实际利率'\\)?.value\\)\\);}\")"
     ]
   }
 }

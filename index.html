@@ -78,7 +78,7 @@
 
   .body{display:grid;grid-template-columns:1fr 1fr;gap:0}
   @media(max-width:430px){.body{grid-template-columns:1fr}}
-  .col{padding:13px 18px}
+  .col{padding:13px 16px;min-width:0;overflow:hidden}
   .col.left{border-right:1px solid var(--line)}
   @media(max-width:430px){.col.left{border-right:0;border-bottom:1px solid var(--line)}}
   .col h4{font-size:11px;font-weight:700;letter-spacing:.06em;color:var(--ink2);
@@ -87,28 +87,29 @@
   .grp-lbl{font-size:10.5px;color:var(--muted);font-weight:500;margin:9px 0 3px}
 
   /* ---------- indicator row : 真实数值 + 同比 + 评分 ---------- */
-  .row{display:flex;align-items:center;gap:6px;padding:3.5px 0;border-bottom:1px dotted #EEEBE3}
+  .row{display:flex;align-items:center;gap:5px;padding:3.5px 0;border-bottom:1px dotted #EEEBE3}
   .row:last-child{border-bottom:0}
   .row .dot{width:6px;height:6px;border-radius:50%;flex:none}
-  .row .nm{flex:1;font-size:12px;color:var(--ink);min-width:0;
+  .row .nm{flex:1;font-size:12px;color:var(--ink);min-width:34px;
     white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .row .val{font-family:var(--mono);font-size:12px;font-weight:600;color:var(--ink);
-    text-align:right;min-width:46px;flex:none}
-  .row .val .u{font-weight:400;font-size:9px;color:var(--muted);margin-left:2px}
-  .row .chg{font-family:var(--mono);font-size:11px;width:62px;text-align:right;flex:none}
-  .arr{font-family:var(--mono);font-size:11px;width:12px;text-align:center;flex:none}
+    text-align:right;min-width:42px;flex:none;white-space:nowrap}
+  .row .val .u{font-weight:400;font-size:9px;color:var(--muted);margin-left:1px}
+  .row .chg{font-family:var(--mono);font-size:10.5px;width:54px;text-align:right;flex:none;white-space:nowrap}
+  .arr{font-family:var(--mono);font-size:11px;width:11px;text-align:center;flex:none}
   .chip{font-family:var(--mono);font-size:11px;font-weight:600;border-radius:5px;
-    padding:1px 6px;min-width:30px;text-align:center;flex:none}
+    padding:1px 5px;min-width:28px;text-align:center;flex:none}
   .pp{background:var(--s-pp);color:var(--t-pp)} .p{background:var(--s-p);color:var(--t-p)}
   .z{background:var(--s-z);color:var(--t-z)} .n{background:var(--s-n);color:var(--t-n)}
   .nn{background:var(--s-nn);color:var(--t-nn)}
   .na{color:var(--muted)}
 
   /* phase locator */
-  .phase{margin-top:13px;display:flex;align-items:center;gap:13px}
-  .quad{width:84px;height:84px;flex:none}
-  .phase .pinfo .pn{font-size:13.5px;font-weight:700}
-  .phase .pinfo .pd{font-size:11px;color:var(--ink2);margin-top:1px;line-height:1.4}
+  .phase{margin-top:13px;display:flex;align-items:center;gap:12px}
+  .quad{width:80px;height:80px;flex:none}
+  .phase .pinfo{min-width:0}
+  .phase .pinfo .pn{font-size:13px;font-weight:700}
+  .phase .pinfo .pd{font-size:10.5px;color:var(--ink2);margin-top:1px;line-height:1.4;white-space:normal}
   .phase .pinfo .axes{font-family:var(--mono);font-size:9.5px;color:var(--muted);margin-top:5px;line-height:1.5}
 
   .footer{padding:11px 18px;border-top:1px solid var(--line);background:var(--bg);
@@ -146,7 +147,7 @@
       <span class="src-dot src-auto"></span>自动·真实序列
       <span class="src-dot src-man"></span>人工录入</div>
   </div>
-  <div class="disc" id="disc">数值为各源真实读数 · <b>自动</b>：FRED（美国宏观/驱动）· Eurostat（德国/欧盟工业生产）· UN Comtrade（自华钢材 HS72 进口）；标 ○ 为暂无免费 API、沿用人工读数</div>
+  <div class="disc" id="disc">数值为各源真实读数 · <b>自动</b>：FRED（美国）· Eurostat（欧盟工业生产）· OECD CLI/KEI（各国景气·出口·实际利率）· UN Comtrade（自华钢材HS72进口）；标 ○ 为暂无免费API、沿用人工。越南不在 OECD，自动覆盖最少</div>
 </header>
 
 <div class="wrap">
@@ -239,21 +240,36 @@ function quadSVG(d,i,active){
   </svg>`;
 }
 
-// 指标行：●/○ 名称 | 真实值 | 同比 | 评分
-function chipRow(x,calc){
+// 月份缩写 2026-04-01 → ’26·04
+function asofShort(d){ if(!d) return ''; const m=/^(\d{4})-(\d{2})/.exec(d); return m?`’${m[1].slice(2)}·${m[2]}`:''; }
+function fmtSigned(v){ return (v>0?'+':'')+(+v).toFixed(1); }
+
+// 指标行：●/○ 名称 | 真实值 | 同比/时点 | 评分
+function chipRow(x){
   const dotCls=x.auto?'src-auto':'src-man';
-  const title=[x.note, x.source?('来源：'+x.source):'', x.asof?('时点：'+x.asof):'', x.stale?'（自动取数失败，沿用人工）':'']
+  const calc=x.calc||'pct';
+  const title=[x.note, x.source?('来源：'+x.source):'', x.asof?('时点：'+x.asof):'', x.stale?'（暂无近期数据，沿用人工种子）':'']
     .filter(Boolean).join(' · ');
-  const chg=x.auto?fmtChg(x.yoy, calc||'pct'):'';
-  const chgHtml=x.auto&&x.yoy!=null
-    ? `<span class="chg" style="color:${chgColor(x.yoy,x.dir)}">${chg}<span style="color:var(--muted)">y</span></span>`
-    : `<span class="chg na">${x.auto?'—':'人工'}</span>`;
   const s=x.score||0;
+
+  let valHtml, chgHtml;
+  if(!x.auto){
+    valHtml=`<span class="val">${x.value!=null?fmtVal(x.value)+`<span class="u">${unitAbbr(x.unit)}</span>`:'—'}</span>`;
+    chgHtml=`<span class="chg na">人工</span>`;
+  } else if(x.kind==='growth'){
+    // 值本身即同比%；时点放右栏体现切近
+    valHtml=`<span class="val" style="color:${chgColor(x.value,x.dir)}">${fmtSigned(x.value)}<span class="u">%y</span></span>`;
+    chgHtml=`<span class="chg na">${asofShort(x.asof)}</span>`;
+  } else {
+    valHtml=`<span class="val">${fmtVal(x.value)}${x.value!=null?`<span class="u">${unitAbbr(x.unit)}</span>`:''}</span>`;
+    chgHtml=x.yoy!=null
+      ? `<span class="chg" style="color:${chgColor(x.yoy,x.dir)}">${fmtChg(x.yoy,calc)}<span style="color:var(--muted)">y</span></span>`
+      : `<span class="chg na">${asofShort(x.asof)||'—'}</span>`;
+  }
   return `<div class="row" title="${title.replace(/"/g,'')}">
     <span class="dot ${dotCls}"></span>
     <span class="nm">${x.nm}</span>
-    <span class="val">${fmtVal(x.value)}${x.value!=null?`<span class="u">${unitAbbr(x.unit)}</span>`:''}</span>
-    ${chgHtml}
+    ${valHtml}${chgHtml}
     <span class="arr" style="color:${arrColor(s)}">${arr(s)}</span>
     <span class="chip ${cls(s)}">${fmt(s)}</span></div>`;
 }
@@ -300,13 +316,13 @@ function render(payload){
         <div class="col left">
           <h4>Descriptive <span class="dim">定性状态 · 真实值/同比</span></h4>
           <div class="grp-lbl">直接产业指标</div>
-          ${r.industry.map(x=>chipRow(x,'pct')).join('')}
+          ${r.industry.map(chipRow).join('')}
           <div class="grp-lbl">宏观环境指标</div>
-          ${r.macro.map(x=>chipRow(x,x.nm==='制造业PMI'||x.nm==='实际利率'?'pt':'pct')).join('')}
+          ${r.macro.map(chipRow).join('')}
         </div>
         <div class="col">
           <h4>Driver <span class="dim">核心驱动</span></h4>
-          ${r.driver.map(x=>chipRow(x,x.nm==='实际利率'?'pt':'pct')).join('')}
+          ${r.driver.map(chipRow).join('')}
           <div class="phase">
             ${quadSVG(d,r.inv,pk)}
             <div class="pinfo">

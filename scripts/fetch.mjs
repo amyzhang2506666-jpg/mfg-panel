@@ -9,7 +9,7 @@ import { writeFileSync, mkdirSync, readFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { REGIONS, SCORE_RULES } from '../config/sources.mjs';
-import { fetchSeries } from '../lib/providers.mjs';
+import { fetchSeries, dbnomics } from '../lib/providers.mjs';
 
 const __dir = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dir, '..');
@@ -37,12 +37,33 @@ function scoreFrom(value, calc, dir) {
   return s * dir;
 }
 
-// 计算一个自动指标的 {value, asof, mom, yoy, score}
+// 数据切近性：最新观测滞后超过 maxLagMonths 个月即判为过期
+const NOW = new Date();
+function freshEnough(series, maxLagMonths) {
+  if (!series || !series.length) return false;
+  if (!maxLagMonths) return true;
+  const ageM = (NOW - new Date(lastOf(series).date)) / (30.44 * 24 * 3600 * 1000);
+  return ageM <= maxLagMonths + 0.6;
+}
+
+// 计算一个自动指标的 {value, asof, mom, yoy, score, kind}
 function compute(series, spec) {
   if (!series || !series.length) return null;
   const latest = lastOf(series);
-  const prev = nMonthsBack(series, latest.date, spec.freq === 'D' ? 1 : 1)
-            || series[series.length - 2] || null;
+
+  // growth 型：序列值本身已是同比%，直接作信号
+  if (spec.kind === 'growth') {
+    const prev = series[series.length - 2] || null;
+    return {
+      value: round(latest.value, 1), asof: latest.date, kind: 'growth',
+      yoy: round(latest.value, 1),
+      mom: prev ? round(latest.value - prev.value, 1) : null,
+      score: scoreFrom(latest.value, 'pct', spec.dir) ?? 0,
+    };
+  }
+
+  // level 型：用 12 个月同比%（pct）或点差（pt）
+  const prev = series[series.length - 2] || null;
   const yearAgo = nMonthsBack(series, latest.date, 12);
   const pct = (a, b) => (b && b.value) ? (a.value - b.value) / Math.abs(b.value) * 100 : null;
   const pt = (a, b) => b ? a.value - b.value : null;
@@ -51,12 +72,11 @@ function compute(series, spec) {
   const momPct = prev ? pct(latest, prev) : null;
   const yoyPt = yearAgo ? pt(latest, yearAgo) : null;
 
-  // 打分信号：pct 用同比%；pt 用 12 个月点差（缺则用环比点差）
   const signal = spec.calc === 'pct' ? yoyPct : (yoyPt ?? (prev ? pt(latest, prev) : null));
   const score = scoreFrom(signal, spec.calc, spec.dir);
 
   return {
-    value: round(latest.value), asof: latest.date,
+    value: round(latest.value), asof: latest.date, kind: 'level',
     mom: momPct == null ? null : round(momPct, 1),
     yoy: spec.calc === 'pct' ? (yoyPct == null ? null : round(yoyPct, 1))
                              : (yoyPt == null ? null : round(yoyPt, 2)),
@@ -65,25 +85,41 @@ function compute(series, spec) {
 }
 const round = (x, d = 2) => Number.isFinite(x) ? +x.toFixed(d) : x;
 
+// 实际利率序列 = 长端国债利率 − CPI同比，按月对齐
+async function buildRealRate(spec) {
+  const [rate, cpi] = await Promise.all([dbnomics(spec.rate), dbnomics(spec.cpi)]);
+  if (!rate || !cpi) return null;
+  const cpiMap = new Map(cpi.map(o => [o.date.slice(0, 7), o.value]));
+  const out = rate
+    .map(o => ({ date: o.date, value: cpiMap.has(o.date.slice(0, 7)) ? o.value - cpiMap.get(o.date.slice(0, 7)) : null }))
+    .filter(o => o.value != null);
+  return out.length ? out : null;
+}
+
 // ---- 处理单个指标格 -------------------------------------------------------
 async function resolveCell(spec) {
-  const base = { nm: spec.nm, rel: spec.rel, dir: spec.dir, unit: spec.unit, note: spec.note || '' };
+  const base = { nm: spec.nm, rel: spec.rel, dir: spec.dir, unit: spec.unit,
+                 note: spec.note || '', kind: spec.kind || 'level', calc: spec.calc || 'pct' };
   if (spec.provider === 'manual') {
     const m = spec.manual || {};
     return { ...base, auto: false, value: m.value, yoy: null, mom: null,
              score: m.score ?? 0, source: m.source || '人工', asof: null };
   }
-  const series = await fetchSeries(spec, env);
-  const c = compute(series, spec);
+  let series, label;
+  if (spec.compute === 'realrate') { series = await buildRealRate(spec); label = 'OECD KEI'; }
+  else { series = await fetchSeries(spec, env); label = PROVIDER_LABEL[spec.provider]; }
+
+  if (!freshEnough(series, spec.maxLagMonths)) series = null;   // 过期→回退
+  const c = series ? compute(series, spec) : null;
   if (!c) {
     const m = spec.manual || {};
     return { ...base, auto: false, value: m.value ?? null, yoy: null, mom: null,
-             score: m.score ?? 0, source: (m.source || '取数失败·回退人工'), asof: null,
+             score: m.score ?? 0, source: (m.source || '无可用近期数据·人工'), asof: null,
              stale: true };
   }
-  return { ...base, auto: true, ...c, source: PROVIDER_LABEL[spec.provider] };
+  return { ...base, auto: true, ...c, source: label };
 }
-const PROVIDER_LABEL = { fred: 'FRED', eurostat: 'Eurostat', comtrade: 'UN Comtrade', aisi: 'AISI' };
+const PROVIDER_LABEL = { fred: 'FRED', eurostat: 'Eurostat', dbnomics: 'OECD', comtrade: 'UN Comtrade', aisi: 'AISI' };
 
 // ---- 自华钢材进口（Comtrade，喂对华含义脚注）------------------------------
 async function resolveChinaImport(ci) {

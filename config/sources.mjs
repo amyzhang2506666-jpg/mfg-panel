@@ -1,170 +1,156 @@
 // =============================================================================
 // 指标 → 数据源映射表  (config/sources.mjs)
 // -----------------------------------------------------------------------------
-// 看板每一个指标格子都在这里登记。fetch.mjs 据此自动取数、算同比/环比、打分。
+// 看板每个指标格都在这里登记。fetch.mjs 据此取真值、算同比/环比、打分。
 //
-// 字段说明：
-//   nm        指标名（与看板显示一致）
-//   rel       用钢相关性：'高' | '中' | '低'   → 决定综合评分权重 (高3/中2/低1)
-//   dir       评分方向：1=正向(越升越好) | -1=反向(如库存、实际利率，越升越差)
-//   calc      'pct'=按同比百分比分档 | 'pt'=按点差分档(PMI/利率水平)
-//   provider  'fred' | 'eurostat' | 'comtrade' | 'aisi' | 'manual'
-//   code      该 provider 下的序列代码 / 参数
-//   unit      显示单位
-//   freq      'M'月 | 'W'周 | 'Q'季 | 'D'日
-//   note      备注（口径/代理说明）
-//   manual    当 provider==='manual' 时的人工种子 {value, score, source}
+// 自动源（均为免费）：
+//   · FRED      美国宏观/驱动（需免费 key，存 GitHub Secret）
+//   · Eurostat  德国/欧盟 工业生产、基本金属生产（无 key）
+//   · DBnomics→OECD KEI/CLI  各国 工业生产·出口·景气先行(CLI)·利率·CPI（无 key）
+//                覆盖 OECD 及主要伙伴国，唯越南不在其列
+//   · UN Comtrade  各国「自华钢材 HS72 进口」（无 key，preview）
 //
-// 自动源现状（best-effort）：
-//   · FRED      美国宏观/驱动几乎全列（需免费 API key，存 GitHub Secret）
-//   · Eurostat  德国/欧盟 工业生产指数（免费无 key）
-//   · Comtrade  各地区「自华钢材进口」HS72（免费 preview 端点，无 key）
-//   · AISI      美国周度粗钢产量/产能利用率（尽力解析，失败回退人工）
-//   其余无免费 API 的格子标记 manual，沿用上一期人工读数，看板照常渲染。
+// 字段：
+//   nm 指标名 · rel 用钢相关性(高3/中2/低1) · dir 评分方向(1正/-1反)
+//   calc 'pct'同比百分比分档 | 'pt'点差分档 · kind 'level'数值/'growth'已是同比%
+//   provider+code 自动源 · compute:'realrate' 实际利率=长端利率−CPI同比
+//   manual {value,score,source} 无免费API时的人工种子（看板照常渲染）
+//   maxLagMonths 数据滞后超过此月数即判为过期→回退人工（保证“切近”）
 // =============================================================================
 
-// 评分分档规则（来源：Excel「使用说明」R28/R29）
 export const SCORE_RULES = {
-  pct: [ [5, 2], [1, 1], [-1, 0], [-5, -1], [-Infinity, -2] ],   // 同比% 阈值
-  pt:  [ [2, 2], [0.5, 1], [-0.5, 0], [-2, -1], [-Infinity, -2] ] // 点差 阈值
+  pct: [ [5, 2], [1, 1], [-1, 0], [-5, -1], [-Infinity, -2] ],   // 同比%
+  pt:  [ [2, 2], [0.5, 1], [-0.5, 0], [-2, -1], [-Infinity, -2] ] // 点差
 };
 
-// Comtrade reporter 代码（M49）
-const M49 = { US: 842, DE: 276, IN: 699, VN: 704 };
+// ---- OECD KEI（经 DBnomics）单元构造器 -------------------------------------
+const KEI = a => `OECD/DSD_KEI@DF_KEI/${a}`;
+const cProd = a => ({ provider: 'dbnomics', code: `${KEI(a)}.M.PRVM.GR.BTE.Y.GY`, kind: 'growth', calc: 'pct', unit: '%', maxLagMonths: 5, note: 'OECD KEI 工业生产同比' });
+const cEx   = a => ({ provider: 'dbnomics', code: `${KEI(a)}.M.EX.GR._T.Y.GY`,     kind: 'growth', calc: 'pct', unit: '%', maxLagMonths: 5, note: 'OECD KEI 商品出口同比' });
+const cCli  = a => ({ provider: 'dbnomics', code: `${KEI(a)}.M.LI.IX._T.AA._Z`,     kind: 'level',  calc: 'pt',  unit: 'idx', maxLagMonths: 4, note: 'OECD 合成领先指标(CLI)，与制造业 PMI 同向先行；100=趋势' });
+const cReal = a => ({ compute: 'realrate', rate: `${KEI(a)}.M.IRLT.PA._Z._Z._Z`, cpi: `${KEI(a)}.M.CP.GR._Z._Z.GY`, kind: 'level', calc: 'pt', unit: '%', maxLagMonths: 5, note: '实际利率=长端国债利率−CPI同比（OECD KEI）' });
+const man = (score, source, unit, value = null) => ({ provider: 'manual', unit, manual: { value, score, source } });
+
+// 组装一个地区卡（统一 11 个指标格 + 自华进口脚注）
+function region({ key, name, en, tier, china, reporter, area, steel, ip, inv, consume, priv, fisc, weup }) {
+  const A = area; // OECD 代码，null=不在 OECD（如越南）
+  const auto = A != null;
+  return {
+    key, name, en, tier, china,
+    chinaImport: { provider: 'comtrade', reporter, hs: '72', unit: '吨' },
+    industry: [
+      { nm: '粗钢产量',   rel: '高', dir: 1,  ...steel },
+      { nm: '第二产业用电', rel: '高', dir: 1, ...(weup || man(0, '（人工）', 'GWh')) },
+      { nm: '制造业出口', rel: '高', dir: 1,  ...(auto ? cEx(A) : man(0, '（人工）', '%')) },
+    ],
+    macro: [
+      { nm: '景气先行CLI', rel: '中', dir: 1, ...(auto ? cCli(A) : man(0, 'PMI/景气(人工)', 'idx')) },
+      { nm: '工业增加值', rel: '中', dir: 1, ...ip },
+      { nm: '实际利率',   rel: '高', dir: -1, ...(auto ? cReal(A) : man(0, '央行(人工)', '%')) },
+      { nm: '库存',       rel: '中', dir: -1, ...(inv || man(0, '（人工）', 'idx')) },
+    ],
+    driver: [
+      { nm: '居民消费', dir: 1, ...(consume || man(0, '（人工）', 'idx')) },
+      { nm: '固投·私人', dir: 1, ...(priv || man(0, '（人工）', 'idx')) },
+      { nm: '固投·财政', dir: 1, ...(fisc || man(0, '（人工）', 'idx')) },
+      { nm: '出口外需', dir: 1, ...(auto ? cEx(A) : man(0, '（人工）', '%')) },
+      { nm: '实际利率', dir: -1, ...(auto ? cReal(A) : man(0, '央行(人工)', '%')) },
+    ],
+    invFrom: inv && inv.provider === 'fred' ? { provider: 'fred', code: inv.code } : null,
+    invSeed: inv && inv.manual ? inv.manual.score : 0,
+  };
+}
+
+// FRED 单元
+const fredCell = (code, unit, note, extra = {}) => ({ provider: 'fred', code, unit, kind: 'level', calc: 'pct', note, maxLagMonths: 4, ...extra });
 
 export const REGIONS = [
-  // ===========================================================================
-  {
-    key: 'US', name: '美国', en: 'UNITED STATES', tier: '一线',
+  region({
+    key: 'US', name: '美国', en: 'UNITED STATES', tier: '一线', reporter: 842, area: 'USA',
     china: '本土供应为主、贸易壁垒高，对华直接出钢拉动有限；间接用钢随设备与汽车进口小幅承压。',
-    // 「自华钢材进口」用 Comtrade 实算，喂给对华含义脚注
-    chinaImport: { provider: 'comtrade', reporter: M49.US, hs: '72', unit: '吨' },
-
-    industry: [
-      { nm: '粗钢产量', rel: '高', dir: 1, calc: 'pct', freq: 'M',
-        provider: 'fred', code: 'IPG331S', unit: '指数',
-        note: 'FRED 初级金属工业生产指数(NAICS 331)，作粗钢产量代理；周度真值见 AISI' },
-      { nm: '第二产业用电', rel: '高', dir: 1, calc: 'pct', freq: 'M',
-        provider: 'manual', unit: '亿千瓦时',
-        note: 'EIA 工业用电，暂无稳定免费 JSON，人工',
-        manual: { value: null, score: 1, source: 'EIA(人工)' } },
-      { nm: '制造业出口', rel: '高', dir: 1, calc: 'pct', freq: 'M',
-        provider: 'fred', code: 'BOPGEXP', unit: '百万美元',
-        note: 'BOP 商品出口额，作制造业外需代理' },
-    ],
-    macro: [
-      { nm: '制造业PMI', rel: '中', dir: 1, calc: 'pt', freq: 'M',
-        provider: 'manual', unit: '指数',
-        note: 'ISM 受许可限制，FRED 已下架，人工录标题值',
-        manual: { value: null, score: 0, source: 'ISM(人工)' } },
-      { nm: '工业增加值', rel: '中', dir: 1, calc: 'pct', freq: 'M',
-        provider: 'fred', code: 'INDPRO', unit: '指数', note: '美联储 G.17 工业生产总指数' },
-      { nm: '实际利率', rel: '高', dir: -1, calc: 'pt', freq: 'D',
-        provider: 'fred', code: 'DFII10', unit: '%',
-        note: '10年期 TIPS 实际收益率；按 12 个月点差打分，升=融资收紧(反向)' },
-      { nm: '库存', rel: '中', dir: -1, calc: 'pct', freq: 'M',
-        provider: 'fred', code: 'BUSINV', unit: '百万美元',
-        note: '全口径企业库存；升=偏空(反向)，也用作相位库存轴' },
-    ],
-    driver: [
-      { nm: '居民消费', dir: 1, calc: 'pct', freq: 'M', provider: 'fred', code: 'RSAFS', unit: '百万美元', note: '广义零售销售额' },
-      { nm: '固投·私人', dir: 1, calc: 'pct', freq: 'M', provider: 'fred', code: 'DGORDER', unit: '百万美元', note: '耐用品新订单，作私人固投代理' },
-      { nm: '固投·财政', dir: 1, calc: 'pct', freq: 'M', provider: 'fred', code: 'TLPUBCONS', unit: '百万美元', note: '公共部门建造支出，作财政投资代理' },
-      { nm: '出口外需', dir: 1, calc: 'pct', freq: 'M', provider: 'fred', code: 'BOPGEXP', unit: '百万美元', note: 'BOP 商品出口额' },
-      { nm: '实际利率', dir: -1, calc: 'pt', freq: 'D', provider: 'fred', code: 'DFII10', unit: '%', note: '10年期 TIPS' },
-    ],
-    // 库存方向（相位纵轴）：复用 BUSINV，dir -1 已在 macro 里；此处单独取号
-    invFrom: { provider: 'fred', code: 'BUSINV' },
-  },
-
-  // ===========================================================================
-  {
-    key: 'DE', name: '德国 / 欧盟', en: 'GERMANY / EU', tier: '一线',
+    steel: fredCell('IPG331S', 'idx', 'FRED 初级金属生产指数(NAICS331)，作粗钢产量代理；周度真值见 AISI'),
+    ip:    fredCell('INDPRO', 'idx', 'FRED 工业生产总指数'),
+    inv:   fredCell('BUSINV', '$m', 'FRED 全口径企业库存；升=偏空（反向）', { dir: -1 }),
+    consume: fredCell('RSAFS', '$m', 'FRED 广义零售销售'),
+    priv:  fredCell('DGORDER', '$m', 'FRED 耐用品新订单，作私人固投代理'),
+    fisc:  fredCell('TLPUBCONS', '$m', 'FRED 公共部门建造支出，作财政投资代理'),
+    weup:  man(1, 'EIA(人工)', '亿kWh'),
+  }),
+  region({
+    key: 'DE', name: '德国 / 欧盟', en: 'GERMANY / EU', tier: '一线', reporter: 276, area: 'DEU',
     china: '需求疲弱叠加中国成品（尤其汽车）竞争加剧，对华间接用钢偏空（替代型）。',
-    chinaImport: { provider: 'comtrade', reporter: M49.DE, hs: '72', unit: '吨' },
-
-    industry: [
-      { nm: '粗钢产量', rel: '高', dir: 1, calc: 'pct', freq: 'M',
-        provider: 'eurostat', code: 'sts_inpr_m|DE|C24', unit: '指数',
-        note: 'Eurostat 基本金属(NACE C24)生产指数' },
-      { nm: '第二产业用电', rel: '高', dir: 1, calc: 'pct', freq: 'M',
-        provider: 'manual', unit: 'GWh', manual: { value: null, score: -1, source: 'Eurostat(人工)' } },
-      { nm: '制造业出口', rel: '高', dir: 1, calc: 'pct', freq: 'M',
-        provider: 'manual', unit: '十亿欧元', manual: { value: null, score: -1, source: 'Destatis(人工)' } },
-    ],
-    macro: [
-      { nm: '制造业PMI', rel: '中', dir: 1, calc: 'pt', freq: 'M',
-        provider: 'manual', unit: '指数', manual: { value: null, score: -1, source: 'S&P Global(人工)' } },
-      { nm: '工业增加值', rel: '中', dir: 1, calc: 'pct', freq: 'M',
-        provider: 'eurostat', code: 'sts_inpr_m|DE|B-D', unit: '指数',
-        note: 'Eurostat 工业(B-D)生产指数，经季调' },
-      { nm: '实际利率', rel: '高', dir: -1, calc: 'pt', freq: 'M',
-        provider: 'manual', unit: '%', manual: { value: null, score: 0, source: 'ECB(人工)' } },
-      { nm: '库存', rel: '中', dir: -1, calc: 'pct', freq: 'M',
-        provider: 'manual', unit: '指数', manual: { value: null, score: -1, source: '(人工)' } },
-    ],
-    driver: [
-      { nm: '居民消费', dir: 1, calc: 'pct', freq: 'M', provider: 'manual', unit: '指数', manual: { value: null, score: -1, source: 'Eurostat(人工)' } },
-      { nm: '固投·私人', dir: 1, calc: 'pct', freq: 'M', provider: 'manual', unit: '指数', manual: { value: null, score: -1, source: '(人工)' } },
-      { nm: '固投·财政', dir: 1, calc: 'pct', freq: 'M', provider: 'manual', unit: '指数', manual: { value: null, score: 0, source: '(人工)' } },
-      { nm: '出口外需', dir: 1, calc: 'pct', freq: 'M', provider: 'manual', unit: '十亿欧元', manual: { value: null, score: -2, source: 'Eurostat(人工)' } },
-      { nm: '实际利率', dir: -1, calc: 'pt', freq: 'M', provider: 'manual', unit: '%', manual: { value: null, score: 0, source: 'ECB(人工)' } },
-    ],
-    invFrom: null, // 无自动库存源，相位库存轴用人工 invSeed
-    invSeed: -1,
-  },
-
-  // ===========================================================================
-  {
-    key: 'IN', name: '印度', en: 'INDIA', tier: '一线',
+    steel: { provider: 'eurostat', code: 'sts_inpr_m|DE|C24', unit: 'idx', kind: 'level', calc: 'pct', maxLagMonths: 4, note: 'Eurostat 基本金属(NACE C24)生产指数' },
+    ip:    { provider: 'eurostat', code: 'sts_inpr_m|DE|B-D', unit: 'idx', kind: 'level', calc: 'pct', maxLagMonths: 4, note: 'Eurostat 工业(B-D)生产指数，季调' },
+    inv:   man(-1, '（人工）', 'idx'),
+    consume: man(-1, 'Eurostat(人工)', 'idx'),
+    priv:  man(-1, '（人工）', 'idx'),
+    fisc:  man(0, '（人工）', 'idx'),
+    weup:  man(-1, 'Eurostat(人工)', 'GWh'),
+  }),
+  region({
+    key: 'IN', name: '印度', en: 'INDIA', tier: '一线', reporter: 699, area: 'IND',
     china: '需求旺盛对自华（直接+间接）用钢形成实质拉动；但本土高炉与 PLI 产能扩张中期形成替代。',
-    chinaImport: { provider: 'comtrade', reporter: M49.IN, hs: '72', unit: '吨' },
-
-    industry: [
-      { nm: '粗钢产量', rel: '高', dir: 1, calc: 'pct', freq: 'M', provider: 'manual', unit: '万吨', manual: { value: null, score: 2, source: 'worldsteel/JPC(人工)' } },
-      { nm: '第二产业用电', rel: '高', dir: 1, calc: 'pct', freq: 'M', provider: 'manual', unit: 'GWh', manual: { value: null, score: 1, source: 'CEA(人工)' } },
-      { nm: '制造业出口', rel: '高', dir: 1, calc: 'pct', freq: 'M', provider: 'manual', unit: '亿美元', manual: { value: null, score: 1, source: '商工部(人工)' } },
-    ],
-    macro: [
-      { nm: '制造业PMI', rel: '中', dir: 1, calc: 'pt', freq: 'M', provider: 'manual', unit: '指数', manual: { value: null, score: 2, source: 'S&P Global(人工)' } },
-      { nm: '工业增加值', rel: '中', dir: 1, calc: 'pct', freq: 'M', provider: 'manual', unit: '指数', manual: { value: null, score: 1, source: 'MOSPI IIP(人工)' } },
-      { nm: '实际利率', rel: '高', dir: -1, calc: 'pt', freq: 'M', provider: 'manual', unit: '%', manual: { value: null, score: 0, source: 'RBI(人工)' } },
-      { nm: '库存', rel: '中', dir: -1, calc: 'pct', freq: 'M', provider: 'manual', unit: '万吨', manual: { value: null, score: 1, source: '(人工)' } },
-    ],
-    driver: [
-      { nm: '居民消费', dir: 1, calc: 'pct', freq: 'M', provider: 'manual', unit: '指数', manual: { value: null, score: 1, source: '(人工)' } },
-      { nm: '固投·私人', dir: 1, calc: 'pct', freq: 'M', provider: 'manual', unit: '指数', manual: { value: null, score: 1, source: '(人工)' } },
-      { nm: '固投·财政', dir: 1, calc: 'pct', freq: 'M', provider: 'manual', unit: '亿卢比', manual: { value: null, score: 2, source: '财政部(人工)' } },
-      { nm: '出口外需', dir: 1, calc: 'pct', freq: 'M', provider: 'manual', unit: '亿美元', manual: { value: null, score: 1, source: '商工部(人工)' } },
-      { nm: '实际利率', dir: -1, calc: 'pt', freq: 'M', provider: 'manual', unit: '%', manual: { value: null, score: 0, source: 'RBI(人工)' } },
-    ],
-    invFrom: null, invSeed: 1,
-  },
-
-  // ===========================================================================
-  {
-    key: 'VN', name: '越南', en: 'VIETNAM', tier: '一线',
+    steel: man(2, 'worldsteel/JPC(人工)', '万吨'),
+    ip:    cProd('IND'),
+    inv:   man(1, '（人工）', '万吨'),
+    consume: man(1, '（人工）', 'idx'),
+    priv:  man(1, '（人工）', 'idx'),
+    fisc:  man(2, '财政部(人工)', '亿卢比'),
+    weup:  man(1, 'CEA(人工)', 'GWh'),
+  }),
+  region({
+    key: 'JP', name: '日本', en: 'JAPAN', tier: '一线', reporter: 392, area: 'JPN',
+    china: '高端装备/汽车产业链发达，自华以中间品与原料为主；本土钢铁自给高，直接拉动有限。',
+    steel: man(0, 'worldsteel/JISF(人工)', '万吨'),
+    ip:    cProd('JPN'),
+    inv:   man(0, '（人工）', 'idx'),
+    consume: man(0, '（人工）', 'idx'),
+    priv:  man(0, '（人工）', 'idx'),
+    fisc:  man(0, '（人工）', '万亿日元'),
+    weup:  man(0, '（人工）', 'GWh'),
+  }),
+  region({
+    key: 'KR', name: '韩国', en: 'SOUTH KOREA', tier: '一线', reporter: 410, area: 'KOR',
+    china: '造船/汽车/电子用钢大国，与中国互为钢材与中间品贸易方；出口高频反映外需冷暖。',
+    steel: man(0, 'worldsteel/KOSA(人工)', '万吨'),
+    ip:    cProd('KOR'),
+    inv:   man(0, '（人工）', 'idx'),
+    consume: man(0, '（人工）', 'idx'),
+    priv:  man(0, '（人工）', 'idx'),
+    fisc:  man(0, '（人工）', '万亿韩元'),
+    weup:  man(0, '（人工）', 'GWh'),
+  }),
+  region({
+    key: 'MX', name: '墨西哥', en: 'MEXICO', tier: '一线', reporter: 484, area: 'MEX',
+    china: '近岸外包热点，制造与建筑用钢扩张；自华钢材与中间品进口快速上升（依赖型，利多）。',
+    steel: man(1, 'worldsteel/CANACERO(人工)', '万吨'),
+    ip:    man(0, 'INEGI(人工)', 'idx'),   // OECD KEI 无墨西哥月度工业生产同比
+    inv:   man(0, '（人工）', 'idx'),
+    consume: man(1, '（人工）', 'idx'),
+    priv:  man(1, '（人工）', 'idx'),
+    fisc:  man(0, '（人工）', '亿比索'),
+    weup:  man(0, '（人工）', 'GWh'),
+  }),
+  region({
+    key: 'ID', name: '印尼', en: 'INDONESIA', tier: '一线', reporter: 360, area: 'IDN',
+    china: '镍-不锈钢一体化与基建扩张，自华装备与钢材进口旺盛（依赖型，利多）。',
+    steel: man(1, 'worldsteel/IISIA(人工)', '万吨'),
+    ip:    man(1, 'BPS(人工)', 'idx'),     // OECD KEI 无印尼月度工业生产同比
+    inv:   man(0, '（人工）', 'idx'),
+    consume: man(1, '（人工）', 'idx'),
+    priv:  man(1, '（人工）', 'idx'),
+    fisc:  man(1, '（人工）', '万亿盾'),
+    weup:  man(1, 'PLN(人工)', 'GWh'),
+  }),
+  region({
+    key: 'VN', name: '越南', en: 'VIETNAM', tier: '一线', reporter: 704, area: null, // 不在 OECD
     china: '高度依赖自华钢材与中间品，对中国用钢形成直接拉动（依赖型，利多）。',
-    chinaImport: { provider: 'comtrade', reporter: M49.VN, hs: '72', unit: '吨' },
-
-    industry: [
-      { nm: '粗钢产量', rel: '高', dir: 1, calc: 'pct', freq: 'M', provider: 'manual', unit: '万吨', manual: { value: null, score: 1, source: 'VSA(人工)' } },
-      { nm: '第二产业用电', rel: '高', dir: 1, calc: 'pct', freq: 'M', provider: 'manual', unit: 'GWh', manual: { value: null, score: 1, source: 'EVN(人工)' } },
-      { nm: '制造业出口', rel: '高', dir: 1, calc: 'pct', freq: 'M', provider: 'manual', unit: '亿美元', manual: { value: null, score: 2, source: 'GSO(人工)' } },
-    ],
-    macro: [
-      { nm: '制造业PMI', rel: '中', dir: 1, calc: 'pt', freq: 'M', provider: 'manual', unit: '指数', manual: { value: null, score: 1, source: 'S&P Global(人工)' } },
-      { nm: '工业增加值', rel: '中', dir: 1, calc: 'pct', freq: 'M', provider: 'manual', unit: '指数', manual: { value: null, score: 1, source: 'GSO IIP(人工)' } },
-      { nm: '实际利率', rel: '高', dir: -1, calc: 'pt', freq: 'M', provider: 'manual', unit: '%', manual: { value: null, score: 0, source: 'SBV(人工)' } },
-      { nm: '库存', rel: '中', dir: -1, calc: 'pct', freq: 'M', provider: 'manual', unit: '指数', manual: { value: null, score: -1, source: 'GSO(人工)' } },
-    ],
-    driver: [
-      { nm: '居民消费', dir: 1, calc: 'pct', freq: 'M', provider: 'manual', unit: '万亿盾', manual: { value: null, score: 0, source: 'GSO(人工)' } },
-      { nm: '固投·私人', dir: 1, calc: 'pct', freq: 'M', provider: 'manual', unit: '指数', manual: { value: null, score: 1, source: '(人工)' } },
-      { nm: '固投·财政', dir: 1, calc: 'pct', freq: 'M', provider: 'manual', unit: '万亿盾', manual: { value: null, score: 1, source: 'MPI(人工)' } },
-      { nm: '出口外需', dir: 1, calc: 'pct', freq: 'M', provider: 'manual', unit: '亿美元', manual: { value: null, score: 2, source: 'GSO(人工)' } },
-      { nm: '实际利率', dir: -1, calc: 'pt', freq: 'M', provider: 'manual', unit: '%', manual: { value: null, score: 0, source: 'SBV(人工)' } },
-    ],
-    invFrom: null, invSeed: -1,
-  },
+    steel: man(1, 'VSA(人工)', '万吨'),
+    ip:    man(1, 'GSO IIP(人工)', 'idx'),
+    inv:   man(-1, 'GSO(人工)', 'idx'),
+    consume: man(0, 'GSO(人工)', '万亿盾'),
+    priv:  man(1, '（人工）', 'idx'),
+    fisc:  man(1, 'MPI(人工)', '万亿盾'),
+    weup:  man(1, 'EVN(人工)', 'GWh'),
+  }),
 ];
