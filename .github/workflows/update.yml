@@ -1,0 +1,52 @@
+name: 刷新看板数据并发布
+
+# 触发：每周一 UTC 05:00（北京时间 13:00）自动刷新 + 手动 + 推送代码时
+on:
+  schedule:
+    - cron: '0 5 * * 1'
+  workflow_dispatch: {}
+  push:
+    branches: [ main ]
+
+# GitHub Pages 部署所需权限
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# 同一时间只跑一个部署
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # 取真实数据 → 生成 data/data.json
+      - name: Fetch real data
+        env:
+          FRED_API_KEY: ${{ secrets.FRED_API_KEY }}   # 在仓库 Settings → Secrets 配置
+        run: node scripts/fetch.mjs
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      # 把整个站点（index.html + data/ + config/ ...）打包发布
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: .
+
+      - name: Deploy to GitHub Pages
+        id: deploy
+        uses: actions/deploy-pages@v4

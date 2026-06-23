@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>海外制造业 Tracking Panel</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#F4F3EF; --surface:#FFFFFF; --ink:#1B2A3A; --ink2:#42546A;
+    --line:#E3E0D8; --line2:#D2CEC4; --muted:#7A7468;
+    --s-pp:#DCE9D0; --t-pp:#2C5234;
+    --s-p:#E9F0DE;  --t-p:#3C6024;
+    --s-z:#ECEAE2;  --t-z:#6B6860;
+    --s-n:#F4E1D2;  --t-n:#8A4A26;
+    --s-nn:#F3D5D1; --t-nn:#9B2D2D;
+    --q-green:#3E7C4F; --q-teal:#1D8C7A; --q-amber:#BA7517; --q-red:#A32D2D;
+    --up:#3C6024; --down:#9B2D2D;
+    --mono:'IBM Plex Mono',ui-monospace,monospace;
+    --sans:'Noto Sans SC',-apple-system,system-ui,sans-serif;
+    --radius:10px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--ink);font-family:var(--sans);
+    font-size:14px;line-height:1.55;-webkit-font-smoothing:antialiased;padding:0 0 64px}
+  .wrap{max-width:1180px;margin:0 auto;padding:0 24px}
+
+  /* ---------- masthead ---------- */
+  header{border-bottom:1px solid var(--line2);background:var(--surface);
+    position:sticky;top:0;z-index:10}
+  .mast{display:flex;align-items:flex-end;justify-content:space-between;
+    gap:20px;padding:22px 24px 18px;max-width:1180px;margin:0 auto;flex-wrap:wrap}
+  .mast h1{font-size:21px;font-weight:700;letter-spacing:-.01em;line-height:1.2}
+  .mast .sub{font-size:12.5px;color:var(--ink2);margin-top:4px;max-width:560px}
+  .mast .meta{font-family:var(--mono);font-size:11.5px;color:var(--muted);text-align:right;line-height:1.7}
+  .mast .meta b{color:var(--ink);font-weight:500}
+
+  .legend{max-width:1180px;margin:0 auto;padding:11px 24px;display:flex;
+    align-items:center;gap:22px;flex-wrap:wrap;font-size:11.5px;color:var(--ink2)}
+  .legend .grp{display:flex;align-items:center;gap:7px}
+  .legend .lbl{font-weight:500;color:var(--ink)}
+  .scale{display:flex;height:8px;border-radius:5px;overflow:hidden;width:120px}
+  .scale span{flex:1}
+  .ph-key{display:inline-block;width:10px;height:10px;border-radius:3px;flex:none}
+  .disc{background:#EAF2E8;border-bottom:1px solid #CFE0CA;color:#3C5A3A;
+    font-size:11.5px;padding:7px 24px;text-align:center}
+  .disc b{font-weight:600}
+  .src-dot{display:inline-block;width:8px;height:8px;border-radius:50%;vertical-align:middle}
+  .src-auto{background:var(--q-teal)} .src-man{background:#C9C3B6}
+
+  /* ---------- grid ---------- */
+  .grid{display:grid;grid-template-columns:repeat(2,1fr);gap:18px;margin-top:22px}
+  @media(max-width:880px){.grid{grid-template-columns:1fr}.mast .meta{text-align:left}}
+
+  /* ---------- card ---------- */
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);
+    overflow:hidden;display:flex;flex-direction:column;transition:box-shadow .18s,border-color .18s}
+  .card:hover{box-shadow:0 6px 22px rgba(27,42,58,.07);border-color:var(--line2)}
+
+  .c-head{display:flex;align-items:center;justify-content:space-between;
+    padding:15px 18px 13px;border-bottom:1px solid var(--line)}
+  .c-head .who{display:flex;align-items:baseline;gap:9px}
+  .c-head .rn{font-size:18px;font-weight:700;letter-spacing:-.01em}
+  .c-head .ren{font-family:var(--mono);font-size:11px;color:var(--muted);letter-spacing:.02em}
+  .tier{font-size:10.5px;font-weight:500;color:var(--ink2);background:var(--bg);
+    border:1px solid var(--line2);border-radius:20px;padding:2px 9px}
+  .comp{display:flex;flex-direction:column;align-items:flex-end;gap:1px}
+  .comp .v{font-family:var(--mono);font-size:24px;font-weight:600;line-height:1}
+  .comp .k{font-size:10px;color:var(--muted);letter-spacing:.02em}
+
+  .verdict{padding:13px 18px;background:linear-gradient(0deg,var(--surface),var(--surface));
+    border-bottom:1px solid var(--line);display:flex;gap:11px;align-items:flex-start}
+  .verdict .tag{font-size:10.5px;font-weight:600;color:#fff;background:var(--ink);
+    border-radius:5px;padding:3px 8px;flex:none;margin-top:1px;letter-spacing:.04em}
+  .verdict p{font-size:13.5px;line-height:1.62;color:var(--ink)}
+
+  .body{display:grid;grid-template-columns:1fr 1fr;gap:0}
+  @media(max-width:430px){.body{grid-template-columns:1fr}}
+  .col{padding:13px 18px}
+  .col.left{border-right:1px solid var(--line)}
+  @media(max-width:430px){.col.left{border-right:0;border-bottom:1px solid var(--line)}}
+  .col h4{font-size:11px;font-weight:700;letter-spacing:.06em;color:var(--ink2);
+    text-transform:uppercase;margin-bottom:2px}
+  .col .dim{font-size:10px;color:var(--muted);font-weight:400;letter-spacing:0;text-transform:none}
+  .grp-lbl{font-size:10.5px;color:var(--muted);font-weight:500;margin:9px 0 3px}
+
+  /* ---------- indicator row : 真实数值 + 同比 + 评分 ---------- */
+  .row{display:flex;align-items:center;gap:6px;padding:3.5px 0;border-bottom:1px dotted #EEEBE3}
+  .row:last-child{border-bottom:0}
+  .row .dot{width:6px;height:6px;border-radius:50%;flex:none}
+  .row .nm{flex:1;font-size:12px;color:var(--ink);min-width:0;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .row .val{font-family:var(--mono);font-size:12px;font-weight:600;color:var(--ink);
+    text-align:right;min-width:46px;flex:none}
+  .row .val .u{font-weight:400;font-size:9px;color:var(--muted);margin-left:2px}
+  .row .chg{font-family:var(--mono);font-size:11px;width:62px;text-align:right;flex:none}
+  .arr{font-family:var(--mono);font-size:11px;width:12px;text-align:center;flex:none}
+  .chip{font-family:var(--mono);font-size:11px;font-weight:600;border-radius:5px;
+    padding:1px 6px;min-width:30px;text-align:center;flex:none}
+  .pp{background:var(--s-pp);color:var(--t-pp)} .p{background:var(--s-p);color:var(--t-p)}
+  .z{background:var(--s-z);color:var(--t-z)} .n{background:var(--s-n);color:var(--t-n)}
+  .nn{background:var(--s-nn);color:var(--t-nn)}
+  .na{color:var(--muted)}
+
+  /* phase locator */
+  .phase{margin-top:13px;display:flex;align-items:center;gap:13px}
+  .quad{width:84px;height:84px;flex:none}
+  .phase .pinfo .pn{font-size:13.5px;font-weight:700}
+  .phase .pinfo .pd{font-size:11px;color:var(--ink2);margin-top:1px;line-height:1.4}
+  .phase .pinfo .axes{font-family:var(--mono);font-size:9.5px;color:var(--muted);margin-top:5px;line-height:1.5}
+
+  .footer{padding:11px 18px;border-top:1px solid var(--line);background:var(--bg);
+    display:flex;gap:9px;align-items:flex-start}
+  .footer .fl{font-size:10.5px;font-weight:600;color:var(--ink2);flex:none;
+    letter-spacing:.03em;margin-top:1px}
+  .footer p{font-size:11.5px;color:var(--ink2);line-height:1.5}
+  .footer .ci{font-family:var(--mono);font-size:10.5px;color:var(--ink);font-weight:500}
+  .dedge{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:5px;vertical-align:middle}
+
+  footer.pg{max-width:1180px;margin:26px auto 0;padding:0 24px;font-size:11px;
+    color:var(--muted);line-height:1.7}
+  .loading{padding:60px 24px;text-align:center;color:var(--muted);font-family:var(--mono)}
+</style>
+</head>
+<body>
+<header>
+  <div class="mast">
+    <div>
+      <h1>海外制造业 Tracking Panel</h1>
+      <div class="sub">分地区研判制造业真实运营活跃度及其对中国（直接+间接）用钢需求的边际含义 · 双维度：定性状态 Descriptive / 核心驱动 Driver</div>
+    </div>
+    <div class="meta" id="meta"><b>颗粒度</b> 国别 · 月<br><b>更新</b> 加载中…</div>
+  </div>
+  <div class="legend">
+    <div class="grp"><span class="lbl">动量评分</span>
+      <div class="scale"><span style="background:#9B2D2D"></span><span style="background:#C8794A"></span><span style="background:#BDB9AE"></span><span style="background:#6E9E54"></span><span style="background:#3E7C4F"></span></div>
+      <span style="font-family:var(--mono);font-size:10.5px">−2 → +2</span></div>
+    <div class="grp"><span class="lbl">周期相位</span>
+      <span class="ph-key" style="background:var(--q-green)"></span>主动补库
+      <span class="ph-key" style="background:var(--q-teal)"></span>被动去库
+      <span class="ph-key" style="background:var(--q-amber)"></span>主动去库
+      <span class="ph-key" style="background:var(--q-red)"></span>被动累库</div>
+    <div class="grp"><span class="lbl">数据源</span>
+      <span class="src-dot src-auto"></span>自动·真实序列
+      <span class="src-dot src-man"></span>人工录入</div>
+  </div>
+  <div class="disc" id="disc">数值为各源真实读数 · <b>自动</b>：FRED（美国宏观/驱动）· Eurostat（德国/欧盟工业生产）· UN Comtrade（自华钢材 HS72 进口）；标 ○ 为暂无免费 API、沿用人工读数</div>
+</header>
+
+<div class="wrap">
+  <div class="grid" id="grid"><div class="loading">正在载入真实数据 data/data.json …</div></div>
+</div>
+
+<footer class="pg">
+  研判句、综合评分与周期相位由各指标的动量评分实时合成。综合评分 = 各 Descriptive 读数按用钢相关性加权平均（高3/中2/低1）；周期相位 = 需求方向（内需+固投+外需合成）× 库存方向 叉乘四象限。动量评分由真实同比/环比按固定分档自动生成（≥+5%→+2 … &lt;−5%→−2；点差类 PMI/利率按 ±2pt/±0.5pt 分档；库存与实际利率为反向指标，自动反号）。
+</footer>
+
+<script>
+const W={ "高":3,"中":2,"低":1 };
+function cls(s){return s>=2?'pp':s>=1?'p':s<=-2?'nn':s<=-1?'n':'z';}
+function arr(s){return s>0?'▲':s<0?'▼':'▬';}
+function arrColor(s){return s>=2?'#3E7C4F':s>0?'#6E9E54':s<=-2?'#9B2D2D':s<0?'#C8794A':'#9A958A';}
+function fmt(s){return (s>0?'+':'')+s.toFixed(s%1?1:0);}
+
+// 数值格式化：大数加千分位，小数保留，null→—
+function fmtVal(v){
+  if(v==null||!isFinite(v)) return '—';
+  const a=Math.abs(v);
+  if(a>=1e9) return (v/1e9).toFixed(1)+'B';
+  if(a>=1e6) return (v/1e6).toFixed(1)+'M';
+  if(a>=1e4) return Math.round(v).toLocaleString('en-US');
+  if(a>=100) return Math.round(v).toLocaleString('en-US');
+  return v.toFixed(1);
+}
+// 同比/环比显示
+function fmtChg(x,calc){
+  if(x==null||!isFinite(x)) return '';
+  const sign=x>0?'+':'';
+  return calc==='pt'? sign+x.toFixed(2)+'pt' : sign+x.toFixed(1)+'%';
+}
+function chgColor(x,dir){
+  if(x==null) return 'var(--muted)';
+  const eff=(x>0?1:x<0?-1:0)*(dir||1);
+  return eff>0?'var(--up)':eff<0?'var(--down)':'var(--muted)';
+}
+
+// ---------- 引擎 ----------
+function composite(r){
+  const rows=[...r.industry,...r.macro];
+  let num=0,den=0;
+  rows.forEach(x=>{const w=W[x.rel]||2;num+=(x.score||0)*w;den+=w;});
+  return den?num/den:0;
+}
+function demand(r){
+  const d=r.driver.filter(x=>x.nm!=='实际利率');
+  return d.length? d.reduce((a,b)=>a+(b.score||0),0)/d.length : 0;
+}
+function dominantDriver(r){
+  let best=r.driver[0];
+  r.driver.forEach(x=>{if(Math.abs(x.score||0)>Math.abs(best.score||0))best=x;});
+  return best;
+}
+const DRV_PHRASE={
+ '居民消费':['居民消费回暖支撑','居民消费疲弱拖累'],
+ '固投·私人':['私人固定资产投资回暖支撑','私人投资走弱拖累'],
+ '固投·财政':['财政与产业政策（基建/补贴）强力拉动','财政支持退坡拖累'],
+ '出口外需':['出口外需走强拉动','出口外需走弱拖累'],
+ '实际利率':['实际利率回落、融资环境改善','高实际利率压制'],
+};
+function driverPhrase(d){const m=DRV_PHRASE[d.nm]||['驱动改善','驱动走弱'];return (d.score||0)>=0?m[0]:m[1];}
+function statePhrase(c){
+  return c>=1?'运营活跃、处于扩张':c>=.4?'温和扩张':c>=0?'低位企稳':
+         c>-.4?'边际走弱':c>-1?'走弱':'明显收缩';
+}
+const PHASE={
+ 'TR':{n:'主动补库',d:'需求强 + 累库 · 用钢需求最强',c:'--q-green'},
+ 'BR':{n:'被动去库',d:'需求强 + 去库 · 复苏初期，补库在即',c:'--q-teal'},
+ 'BL':{n:'主动去库',d:'需求弱 + 去库 · 收缩，用钢需求走弱',c:'--q-amber'},
+ 'TL':{n:'被动累库',d:'需求弱 + 累库 · 见顶滞胀，虚火最危险',c:'--q-red'},
+};
+function phaseKey(d,i){
+  if(d>=0&&i>=0)return'TR'; if(d>=0&&i<0)return'BR';
+  if(d<0&&i<0)return'BL'; return'TL';
+}
+function quadSVG(d,i,active){
+  const px=(d+2)/4*64+10, py=(2-i)/4*64+10;
+  const tints={TR:'#E7F0DE',BR:'#DDF0EC',BL:'#FAEEDA',TL:'#FCEBEB'};
+  const strong={TR:'#3E7C4F',BR:'#1D8C7A',BL:'#BA7517',TL:'#A32D2D'};
+  const cell=(k,x,y)=>`<rect x="${x}" y="${y}" width="37" height="37" rx="3"
+     fill="${active===k?tints[k]:'#F6F5F1'}" stroke="${active===k?strong[k]:'#E3E0D8'}"
+     stroke-width="${active===k?1:.6}"/>`;
+  return `<svg class="quad" viewBox="0 0 84 84">
+    ${cell('TL',5,5)}${cell('TR',43,5)}${cell('BL',5,43)}${cell('BR',43,43)}
+    <line x1="42" y1="6" x2="42" y2="78" stroke="#CFCBC1" stroke-width=".5"/>
+    <line x1="6" y1="42" x2="78" y2="42" stroke="#CFCBC1" stroke-width=".5"/>
+    <circle cx="${px}" cy="${py}" r="4.5" fill="${strong[active]}" stroke="#fff" stroke-width="1.5"/>
+  </svg>`;
+}
+
+// 指标行：●/○ 名称 | 真实值 | 同比 | 评分
+function chipRow(x,calc){
+  const dotCls=x.auto?'src-auto':'src-man';
+  const title=[x.note, x.source?('来源：'+x.source):'', x.asof?('时点：'+x.asof):'', x.stale?'（自动取数失败，沿用人工）':'']
+    .filter(Boolean).join(' · ');
+  const chg=x.auto?fmtChg(x.yoy, calc||'pct'):'';
+  const chgHtml=x.auto&&x.yoy!=null
+    ? `<span class="chg" style="color:${chgColor(x.yoy,x.dir)}">${chg}<span style="color:var(--muted)">y</span></span>`
+    : `<span class="chg na">${x.auto?'—':'人工'}</span>`;
+  const s=x.score||0;
+  return `<div class="row" title="${title.replace(/"/g,'')}">
+    <span class="dot ${dotCls}"></span>
+    <span class="nm">${x.nm}</span>
+    <span class="val">${fmtVal(x.value)}${x.value!=null?`<span class="u">${unitAbbr(x.unit)}</span>`:''}</span>
+    ${chgHtml}
+    <span class="arr" style="color:${arrColor(s)}">${arr(s)}</span>
+    <span class="chip ${cls(s)}">${fmt(s)}</span></div>`;
+}
+function unitAbbr(u){
+  if(!u) return '';
+  return u.replace('百万美元','$m').replace('十亿欧元','€b').replace('指数','idx')
+          .replace('万吨','万t').replace('亿美元','$亿').replace('亿千瓦时','亿kWh');
+}
+
+function moneyShort(v){
+  if(v==null) return '—';
+  const a=Math.abs(v);
+  if(a>=1e9) return '$'+(v/1e9).toFixed(2)+'B';
+  if(a>=1e6) return '$'+(v/1e6).toFixed(1)+'M';
+  if(a>=1e3) return '$'+(v/1e3).toFixed(0)+'K';
+  return '$'+Math.round(v);
+}
+
+function render(payload){
+  const grid=document.getElementById('grid');
+  const meta=document.getElementById('meta');
+  const gen=payload.generatedAt?new Date(payload.generatedAt):null;
+  meta.innerHTML=`<b>颗粒度</b> 国别 · 月<br><b>更新</b> ${gen?gen.toISOString().slice(0,10):'—'}`
+    +`<br><b>FRED</b> ${payload.fredEnabled?'已接入':'待配置密钥'}`;
+
+  grid.innerHTML=payload.regions.map(r=>{
+    const c=composite(r), d=demand(r), pk=phaseKey(d,r.inv), ph=PHASE[pk];
+    const dd=dominantDriver(r);
+    const verdict=`因为${driverPhrase(dd)}，${r.name}制造业${statePhrase(c)}；处于${ph.n}相位，${r.china}`;
+    const ci=r.chinaImport;
+    const ciLine=ci&&ci.valueUSD!=null
+      ? `<br><span class="ci">自华钢材(HS72)进口 ${moneyShort(ci.valueUSD)}`
+        +`${ci.yoy!=null?` · 同比 <span style="color:${ci.yoy>=0?'var(--up)':'var(--down)'}">${ci.yoy>0?'+':''}${ci.yoy}%</span>`:''}`
+        +` <span style="color:var(--muted)">${ci.asof||''} · Comtrade</span></span>` : '';
+    return `<div class="card">
+      <div class="c-head">
+        <div class="who"><span class="rn">${r.name}</span><span class="ren">${r.en}</span>
+          <span class="tier">${r.tier}</span></div>
+        <div class="comp"><span class="v chip ${cls(c)}" style="font-size:22px;padding:2px 9px">${fmt(c)}</span>
+          <span class="k">用钢加权综合</span></div>
+      </div>
+      <div class="verdict"><span class="tag">研判</span><p>${verdict}</p></div>
+      <div class="body">
+        <div class="col left">
+          <h4>Descriptive <span class="dim">定性状态 · 真实值/同比</span></h4>
+          <div class="grp-lbl">直接产业指标</div>
+          ${r.industry.map(x=>chipRow(x,'pct')).join('')}
+          <div class="grp-lbl">宏观环境指标</div>
+          ${r.macro.map(x=>chipRow(x,x.nm==='制造业PMI'||x.nm==='实际利率'?'pt':'pct')).join('')}
+        </div>
+        <div class="col">
+          <h4>Driver <span class="dim">核心驱动</span></h4>
+          ${r.driver.map(x=>chipRow(x,x.nm==='实际利率'?'pt':'pct')).join('')}
+          <div class="phase">
+            ${quadSVG(d,r.inv,pk)}
+            <div class="pinfo">
+              <div class="pn" style="color:var(${ph.c})">${ph.n}</div>
+              <div class="pd">${ph.d}</div>
+              <div class="axes">需求 ${fmt(d)} · 库存 ${fmt(r.inv)}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="footer"><span class="fl">对华用钢</span>
+        <p><span class="dedge" style="background:var(${ph.c})"></span>${r.china}${ciLine}</p></div>
+    </div>`;
+  }).join('');
+}
+
+fetch('data/data.json?_='+Date.now())
+  .then(r=>{ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
+  .then(render)
+  .catch(e=>{
+    document.getElementById('grid').innerHTML=
+      `<div class="loading">未能载入 data/data.json（${e.message}）。<br>
+       请先运行 <b>node scripts/fetch.mjs</b> 生成数据，或等待 GitHub Actions 自动刷新。</div>`;
+  });
+</script>
+</body>
+</html>

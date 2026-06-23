@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(unzip -l files.zip)",
+      "Bash(unzip -o files.zip -d extracted)",
+      "Bash(unzip -o 海外制造业Tracking_Panel.xlsx -d xlsx_dump)",
+      "Bash(node scripts/fetch.mjs)",
+      "Bash(cat)",
+      "Bash(node /tmp/ct.mjs)",
+      "Bash(node -e \"const d=require\\('./data/data.json'\\); const us=d.regions[0]; console.log\\(JSON.stringify\\(us.industry,null,1\\)\\); console.log\\('chinaImport:',JSON.stringify\\(us.chinaImport\\)\\); const de=d.regions[1]; console.log\\('DE 工业增加值:',JSON.stringify\\(de.macro.find\\(x=>x.nm==='工业增加值'\\)\\)\\); console.log\\('DE 粗钢:',JSON.stringify\\(de.industry[0]\\)\\); console.log\\('VN chinaImport:',JSON.stringify\\(d.regions[3].chinaImport\\)\\);\")",
+      "mcp__Claude_Preview__preview_start",
+      "Bash(git init *)",
+      "Bash(git add *)"
+    ]
+  }
+}

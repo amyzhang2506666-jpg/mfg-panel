@@ -1,0 +1,13 @@
+{
+  "name": "haiwai-mfg-panel",
+  "version": "1.0.0",
+  "description": "海外制造业 Tracking Panel —— 真实数据自动接入（FRED / Eurostat / UN Comtrade）",
+  "type": "module",
+  "private": true,
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "fetch": "node scripts/fetch.mjs",
+    "serve": "node scripts/serve.mjs",
+    "dev": "node scripts/fetch.mjs && node scripts/serve.mjs"
+  }
+}
