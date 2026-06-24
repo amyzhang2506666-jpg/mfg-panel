@@ -26,7 +26,7 @@ export const SCORE_RULES = {
 // ---- OECD KEI（经 DBnomics）单元构造器 -------------------------------------
 const KEI = a => `OECD/DSD_KEI@DF_KEI/${a}`;
 const cProd = a => ({ provider: 'dbnomics', code: `${KEI(a)}.M.PRVM.GR.BTE.Y.GY`, kind: 'growth', calc: 'pct', unit: '%', maxLagMonths: 5, note: 'OECD KEI 工业生产同比' });
-const cEx   = a => ({ provider: 'dbnomics', code: `${KEI(a)}.M.EX.GR._T.Y.GY`,     kind: 'growth', calc: 'pct', unit: '%', maxLagMonths: 5, note: 'OECD KEI 商品出口同比' });
+const cEx   = a => ({ provider: 'dbnomics', code: `${KEI(a)}.M.EX.GR._T.Y.GY`,     kind: 'growth', calc: 'pct', unit: '%', maxLagMonths: 6, note: 'OECD KEI 商品出口同比（贸易聚合滞后较多，时点见右栏）' });
 const cCli  = a => ({ provider: 'dbnomics', code: `${KEI(a)}.M.LI.IX._T.AA._Z`,     kind: 'level',  calc: 'pt',  unit: 'idx', maxLagMonths: 4, note: 'OECD 合成领先指标(CLI)，与制造业 PMI 同向先行；100=趋势' });
 const cReal = a => ({ compute: 'realrate', rate: `${KEI(a)}.M.IRLT.PA._Z._Z._Z`, cpi: `${KEI(a)}.M.CP.GR._Z._Z.GY`, kind: 'level', calc: 'pt', unit: '%', maxLagMonths: 5, note: '实际利率=长端国债利率−CPI同比（OECD KEI）' });
 const man = (score, source, unit, value = null) => ({ provider: 'manual', unit, manual: { value, score, source } });
@@ -92,14 +92,26 @@ export const REGIONS = [
     weup:  man(1, 'EIA(人工)', '亿kWh'),
   }),
   region({
-    key: 'DE', name: '德国 / 欧盟', en: 'GERMANY / EU', tier: '一线', reporter: 276, area: 'DEU', pmiKey: 'de',
-    china: '需求疲弱叠加中国成品（尤其汽车）竞争加剧，对华间接用钢偏空（替代型）。',
-    steel: { provider: 'eurostat', code: 'sts_inpr_m|DE|C24', unit: 'idx', kind: 'level', calc: 'pct', maxLagMonths: 4, note: 'Eurostat 基本金属(NACE C24)生产指数' },
-    ip:    { provider: 'eurostat', code: 'sts_inpr_m|DE|B-D', unit: 'idx', kind: 'level', calc: 'pct', maxLagMonths: 4, note: 'Eurostat 工业(B-D)生产指数，季调' },
+    key: 'DE', name: '德国', en: 'GERMANY', tier: '一线', reporter: 276, area: 'DEU', pmiKey: 'de',
+    china: '欧洲制造业风向标；需求疲弱叠加中国成品（尤其汽车）竞争加剧，对华间接用钢偏空（替代型）。',
+    steel: { provider: 'eurostat', code: 'sts_inpr_m|DE|C24', unit: 'idx', kind: 'level', calc: 'pct', maxLagMonths: 4, note: 'Eurostat 德国 基本金属(NACE C24)生产指数' },
+    ip:    { provider: 'eurostat', code: 'sts_inpr_m|DE|B-D', unit: 'idx', kind: 'level', calc: 'pct', maxLagMonths: 4, note: 'Eurostat 德国 工业(B-D)生产指数，季调' },
     inv:   man(-1, '（人工）', 'idx'),
     consume: man(-1, 'Eurostat(人工)', 'idx'),
     priv:  man(-1, '（人工）', 'idx'),
     fisc:  man(0, '（人工）', 'idx'),
+    weup:  man(-1, 'Eurostat(人工)', 'GWh'),
+  }),
+  region({
+    key: 'EU', name: '欧盟 / 欧元区', en: 'EUROPEAN UNION', tier: '一线', reporter: 97, area: 'EA20',
+    china: '作为单一关税与政策区（CBAM、对华钢材保障配额/反倾销）；自华钢材进口看 EU27 整体方向，整体需求弱则替代压力为主。',
+    // IP/基本金属取 EU27 整体；出口/实际利率取 OECD 欧元区；自华钢材进口 reporter=97(EU27)
+    steel: { provider: 'eurostat', code: 'sts_inpr_m|EU27_2020|C24', unit: 'idx', kind: 'level', calc: 'pct', maxLagMonths: 4, note: 'Eurostat 欧盟27 基本金属(NACE C24)生产指数' },
+    ip:    { provider: 'eurostat', code: 'sts_inpr_m|EU27_2020|B-D', unit: 'idx', kind: 'level', calc: 'pct', maxLagMonths: 4, note: 'Eurostat 欧盟27 工业(B-D)生产指数，季调' },
+    inv:   man(-1, '（人工）', 'idx'),
+    consume: man(-1, 'Eurostat(人工)', 'idx'),
+    priv:  man(-1, '（人工）', 'idx'),
+    fisc:  man(0, 'NGEU/各国财政(人工)', 'idx'),
     weup:  man(-1, 'Eurostat(人工)', 'GWh'),
   }),
   region({

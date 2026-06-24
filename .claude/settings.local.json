@@ -23,7 +23,9 @@
       "Bash(curl -s -c mv_cookies.txt -A \"Mozilla/5.0\" \"https://www.macroview.club/charts?name=country_pmi\" -o mv2.html)",
       "Bash(grep -oiE \"csrfmiddlewaretoken[^;]{0,80}\" mv2.html)",
       "Bash(node -e ' *)",
-      "Bash(git push *)"
+      "Bash(git push *)",
+      "Bash(curl -s https://amyzhang2506666-jpg.github.io/mfg-panel/data/data.json?x=__TRACKED_VAR__)",
+      "Bash(echo \"exit=$?\")"
     ]
   }
 }
