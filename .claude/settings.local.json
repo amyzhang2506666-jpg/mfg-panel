@@ -25,7 +25,8 @@
       "Bash(node -e ' *)",
       "Bash(git push *)",
       "Bash(curl -s https://amyzhang2506666-jpg.github.io/mfg-panel/data/data.json?x=__TRACKED_VAR__)",
-      "Bash(echo \"exit=$?\")"
+      "Bash(echo \"exit=$?\")",
+      "Bash(curl -s -A \"Mozilla/5.0\" \"https://www.macroview.club/charts?name=country_pmi\")"
     ]
   }
 }

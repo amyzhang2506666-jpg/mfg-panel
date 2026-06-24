@@ -132,7 +132,7 @@ async function resolveCell(spec) {
              score: m.score ?? 0, source: (m.source || '无可用近期数据·人工'), asof: null,
              stale: true };
   }
-  return { ...base, auto: true, ...c, source: label };
+  return { ...base, auto: true, ...c, source: spec.srcLabel || label };
 }
 const PROVIDER_LABEL = { fred: 'FRED', eurostat: 'Eurostat', dbnomics: 'OECD', comtrade: 'UN Comtrade', macroview: 'macroview', aisi: 'AISI' };
 

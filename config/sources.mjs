@@ -31,9 +31,12 @@ const cCli  = a => ({ provider: 'dbnomics', code: `${KEI(a)}.M.LI.IX._T.AA._Z`, 
 const cReal = a => ({ compute: 'realrate', rate: `${KEI(a)}.M.IRLT.PA._Z._Z._Z`, cpi: `${KEI(a)}.M.CP.GR._Z._Z.GY`, kind: 'level', calc: 'pt', unit: '%', maxLagMonths: 5, note: '实际利率=长端国债利率−CPI同比（OECD KEI）' });
 const man = (score, source, unit, value = null) => ({ provider: 'manual', unit, manual: { value, score, source } });
 
-// 制造业 PMI（macroview 聚合 NBS官方/ISM/S&P Global），值=PMI水平，按偏离50打分
+// 制造业 PMI：取数经 macroview 聚合端点，但显示其真正的权威发布方
+const MV_SRC = { us_ism_pmi: 'ISM', de: 'S&P Global', fr: 'S&P Global', gb: 'S&P Global',
+  jp: 'au Jibun·S&P', in: 'S&P Global', kr: 'S&P Global', cn_pmi: '国家统计局' };
 const cPmi = key => ({ provider: 'macroview', code: key, kind: 'pmi', calc: 'pt', unit: 'idx', maxLagMonths: 3,
-  note: '制造业PMI（macroview 聚合 中国统计局/美国ISM/标普全球）；过期则回退 OECD CLI' });
+  srcLabel: MV_SRC[key] || 'S&P Global',
+  note: `制造业PMI · 权威发布：${MV_SRC[key] || 'S&P Global'}（取数经 macroview 聚合端点）；过期则回退 OECD CLI` });
 
 // 景气领先指标格：PMI 优先（真实读数）→ 过期/缺失回退 OECD CLI → 再回退人工
 function leadCell(pmiKey, area) {
@@ -62,14 +65,14 @@ function region({ key, name, en, tier, china, reporter, area, pmiKey, steel, ip,
       leadCell(pmiKey, A),
       { nm: '工业增加值', rel: '中', dir: 1, ...ip },
       { nm: '实际利率',   rel: '高', dir: -1, ...(auto ? cReal(A) : man(0, '央行(人工)', '%')) },
-      { nm: '库存',       rel: '中', dir: -1, ...(inv || man(0, '（人工）', 'idx')) },
+      { nm: '制造业库存', rel: '中', dir: -1, ...(inv || man(0, '（人工）', 'idx')) },
     ],
+    // 实际利率只在 Descriptive 展示一次，driver 不再重复
     driver: [
       { nm: '居民消费', dir: 1, ...(consume || man(0, '（人工）', 'idx')) },
       { nm: '固投·私人', dir: 1, ...(priv || man(0, '（人工）', 'idx')) },
       { nm: '固投·财政', dir: 1, ...(fisc || man(0, '（人工）', 'idx')) },
       { nm: '出口外需', dir: 1, ...(auto ? cEx(A) : man(0, '（人工）', '%')) },
-      { nm: '实际利率', dir: -1, ...(auto ? cReal(A) : man(0, '央行(人工)', '%')) },
     ],
     invFrom: inv && inv.provider === 'fred' ? { provider: 'fred', code: inv.code } : null,
     invSeed: inv && inv.manual ? inv.manual.score : 0,
@@ -85,7 +88,7 @@ export const REGIONS = [
     china: '本土供应为主、贸易壁垒高，对华直接出钢拉动有限；间接用钢随设备与汽车进口小幅承压。',
     steel: fredCell('IPG331S', 'idx', 'FRED 初级金属生产指数(NAICS331)，作粗钢产量代理；周度真值见 AISI'),
     ip:    fredCell('INDPRO', 'idx', 'FRED 工业生产总指数'),
-    inv:   fredCell('BUSINV', '$m', 'FRED 全口径企业库存；升=偏空（反向）', { dir: -1 }),
+    inv:   fredCell('AMTMTI', '$m', 'FRED 制造业总库存(Manufacturers'+"'"+' Total Inventories)；升=偏空（反向）', { dir: -1 }),
     consume: fredCell('RSAFS', '$m', 'FRED 广义零售销售'),
     priv:  fredCell('DGORDER', '$m', 'FRED 耐用品新订单，作私人固投代理'),
     fisc:  fredCell('TLPUBCONS', '$m', 'FRED 公共部门建造支出，作财政投资代理'),
