@@ -51,6 +51,17 @@ function compute(series, spec) {
   if (!series || !series.length) return null;
   const latest = lastOf(series);
 
+  // pmi 型：值=PMI水平，信号=偏离 50（>50 扩张）；按点差分档
+  if (spec.kind === 'pmi') {
+    const prev = series[series.length - 2] || null;
+    return {
+      value: round(latest.value, 1), asof: latest.date, kind: 'pmi',
+      yoy: null,
+      mom: prev ? round(latest.value - prev.value, 1) : null,
+      score: scoreFrom(latest.value - 50, 'pt', spec.dir) ?? 0,
+    };
+  }
+
   // growth 型：序列值本身已是同比%，直接作信号
   if (spec.kind === 'growth') {
     const prev = series[series.length - 2] || null;
@@ -112,6 +123,10 @@ async function resolveCell(spec) {
   if (!freshEnough(series, spec.maxLagMonths)) series = null;   // 过期→回退
   const c = series ? compute(series, spec) : null;
   if (!c) {
+    // 取数失败/过期 → 先试备用源（如 PMI 过期回退 OECD CLI），再回退人工
+    if (spec.fallback) {
+      return resolveCell({ nm: spec.nm, rel: spec.rel, dir: spec.dir, ...spec.fallback });
+    }
     const m = spec.manual || {};
     return { ...base, auto: false, value: m.value ?? null, yoy: null, mom: null,
              score: m.score ?? 0, source: (m.source || '无可用近期数据·人工'), asof: null,
@@ -119,7 +134,7 @@ async function resolveCell(spec) {
   }
   return { ...base, auto: true, ...c, source: label };
 }
-const PROVIDER_LABEL = { fred: 'FRED', eurostat: 'Eurostat', dbnomics: 'OECD', comtrade: 'UN Comtrade', aisi: 'AISI' };
+const PROVIDER_LABEL = { fred: 'FRED', eurostat: 'Eurostat', dbnomics: 'OECD', comtrade: 'UN Comtrade', macroview: 'macroview', aisi: 'AISI' };
 
 // ---- 自华钢材进口（Comtrade，喂对华含义脚注）------------------------------
 async function resolveChinaImport(ci) {

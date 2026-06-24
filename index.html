@@ -147,7 +147,7 @@
       <span class="src-dot src-auto"></span>自动·真实序列
       <span class="src-dot src-man"></span>人工录入</div>
   </div>
-  <div class="disc" id="disc">数值为各源真实读数 · <b>自动</b>：FRED（美国）· Eurostat（欧盟工业生产）· OECD CLI/KEI（各国景气·出口·实际利率）· UN Comtrade（自华钢材HS72进口）；标 ○ 为暂无免费API、沿用人工。越南不在 OECD，自动覆盖最少</div>
+  <div class="disc" id="disc">数值为各源真实读数 · <b>自动</b>：FRED（美国）· Eurostat（欧盟工业生产）· <b>制造业PMI</b>（美/德/印/日，macroview 聚合 ISM/标普/统计局）· OECD CLI/KEI（各国景气·出口·实际利率，PMI缺失时回退）· UN Comtrade（自华钢材HS72进口）；标 ○ 为暂无免费API、沿用人工</div>
 </header>
 
 <div class="wrap">
@@ -259,6 +259,10 @@ function chipRow(x){
   } else if(x.kind==='growth'){
     // 值本身即同比%；时点放右栏体现切近
     valHtml=`<span class="val" style="color:${chgColor(x.value,x.dir)}">${fmtSigned(x.value)}<span class="u">%y</span></span>`;
+    chgHtml=`<span class="chg na">${asofShort(x.asof)}</span>`;
+  } else if(x.kind==='pmi'){
+    // PMI 水平，>50 扩张配绿、<50 收缩配红；右栏为时点体现切近
+    valHtml=`<span class="val" style="color:${chgColor(x.value-50,x.dir)}">${(+x.value).toFixed(1)}<span class="u">PMI</span></span>`;
     chgHtml=`<span class="chg na">${asofShort(x.asof)}</span>`;
   } else {
     valHtml=`<span class="val">${fmtVal(x.value)}${x.value!=null?`<span class="u">${unitAbbr(x.unit)}</span>`:''}</span>`;

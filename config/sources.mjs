@@ -31,8 +31,23 @@ const cCli  = a => ({ provider: 'dbnomics', code: `${KEI(a)}.M.LI.IX._T.AA._Z`, 
 const cReal = a => ({ compute: 'realrate', rate: `${KEI(a)}.M.IRLT.PA._Z._Z._Z`, cpi: `${KEI(a)}.M.CP.GR._Z._Z.GY`, kind: 'level', calc: 'pt', unit: '%', maxLagMonths: 5, note: '实际利率=长端国债利率−CPI同比（OECD KEI）' });
 const man = (score, source, unit, value = null) => ({ provider: 'manual', unit, manual: { value, score, source } });
 
+// 制造业 PMI（macroview 聚合 NBS官方/ISM/S&P Global），值=PMI水平，按偏离50打分
+const cPmi = key => ({ provider: 'macroview', code: key, kind: 'pmi', calc: 'pt', unit: 'idx', maxLagMonths: 3,
+  note: '制造业PMI（macroview 聚合 中国统计局/美国ISM/标普全球）；过期则回退 OECD CLI' });
+
+// 景气领先指标格：PMI 优先（真实读数）→ 过期/缺失回退 OECD CLI → 再回退人工
+function leadCell(pmiKey, area) {
+  const cliOrMan = area
+    ? { nm: '景气先行CLI', ...cCli(area), fallback: man(0, 'PMI/景气(人工)', 'idx') }
+    : man(0, 'PMI/景气(人工)', 'idx');
+  if (pmiKey) return { nm: '制造业PMI', rel: '中', dir: 1, ...cPmi(pmiKey), fallback: cliOrMan };
+  return area
+    ? { nm: '景气先行CLI', rel: '中', dir: 1, ...cCli(area), fallback: man(0, 'PMI/景气(人工)', 'idx') }
+    : { nm: '制造业PMI', rel: '中', dir: 1, ...man(0, 'PMI/景气(人工)', 'idx') };
+}
+
 // 组装一个地区卡（统一 11 个指标格 + 自华进口脚注）
-function region({ key, name, en, tier, china, reporter, area, steel, ip, inv, consume, priv, fisc, weup }) {
+function region({ key, name, en, tier, china, reporter, area, pmiKey, steel, ip, inv, consume, priv, fisc, weup }) {
   const A = area; // OECD 代码，null=不在 OECD（如越南）
   const auto = A != null;
   return {
@@ -44,7 +59,7 @@ function region({ key, name, en, tier, china, reporter, area, steel, ip, inv, co
       { nm: '制造业出口', rel: '高', dir: 1,  ...(auto ? cEx(A) : man(0, '（人工）', '%')) },
     ],
     macro: [
-      { nm: '景气先行CLI', rel: '中', dir: 1, ...(auto ? cCli(A) : man(0, 'PMI/景气(人工)', 'idx')) },
+      leadCell(pmiKey, A),
       { nm: '工业增加值', rel: '中', dir: 1, ...ip },
       { nm: '实际利率',   rel: '高', dir: -1, ...(auto ? cReal(A) : man(0, '央行(人工)', '%')) },
       { nm: '库存',       rel: '中', dir: -1, ...(inv || man(0, '（人工）', 'idx')) },
@@ -66,7 +81,7 @@ const fredCell = (code, unit, note, extra = {}) => ({ provider: 'fred', code, un
 
 export const REGIONS = [
   region({
-    key: 'US', name: '美国', en: 'UNITED STATES', tier: '一线', reporter: 842, area: 'USA',
+    key: 'US', name: '美国', en: 'UNITED STATES', tier: '一线', reporter: 842, area: 'USA', pmiKey: 'us_ism_pmi',
     china: '本土供应为主、贸易壁垒高，对华直接出钢拉动有限；间接用钢随设备与汽车进口小幅承压。',
     steel: fredCell('IPG331S', 'idx', 'FRED 初级金属生产指数(NAICS331)，作粗钢产量代理；周度真值见 AISI'),
     ip:    fredCell('INDPRO', 'idx', 'FRED 工业生产总指数'),
@@ -77,7 +92,7 @@ export const REGIONS = [
     weup:  man(1, 'EIA(人工)', '亿kWh'),
   }),
   region({
-    key: 'DE', name: '德国 / 欧盟', en: 'GERMANY / EU', tier: '一线', reporter: 276, area: 'DEU',
+    key: 'DE', name: '德国 / 欧盟', en: 'GERMANY / EU', tier: '一线', reporter: 276, area: 'DEU', pmiKey: 'de',
     china: '需求疲弱叠加中国成品（尤其汽车）竞争加剧，对华间接用钢偏空（替代型）。',
     steel: { provider: 'eurostat', code: 'sts_inpr_m|DE|C24', unit: 'idx', kind: 'level', calc: 'pct', maxLagMonths: 4, note: 'Eurostat 基本金属(NACE C24)生产指数' },
     ip:    { provider: 'eurostat', code: 'sts_inpr_m|DE|B-D', unit: 'idx', kind: 'level', calc: 'pct', maxLagMonths: 4, note: 'Eurostat 工业(B-D)生产指数，季调' },
@@ -88,7 +103,7 @@ export const REGIONS = [
     weup:  man(-1, 'Eurostat(人工)', 'GWh'),
   }),
   region({
-    key: 'IN', name: '印度', en: 'INDIA', tier: '一线', reporter: 699, area: 'IND',
+    key: 'IN', name: '印度', en: 'INDIA', tier: '一线', reporter: 699, area: 'IND', pmiKey: 'in',
     china: '需求旺盛对自华（直接+间接）用钢形成实质拉动；但本土高炉与 PLI 产能扩张中期形成替代。',
     steel: man(2, 'worldsteel/JPC(人工)', '万吨'),
     ip:    cProd('IND'),
@@ -99,7 +114,7 @@ export const REGIONS = [
     weup:  man(1, 'CEA(人工)', 'GWh'),
   }),
   region({
-    key: 'JP', name: '日本', en: 'JAPAN', tier: '一线', reporter: 392, area: 'JPN',
+    key: 'JP', name: '日本', en: 'JAPAN', tier: '一线', reporter: 392, area: 'JPN', pmiKey: 'jp',
     china: '高端装备/汽车产业链发达，自华以中间品与原料为主；本土钢铁自给高，直接拉动有限。',
     steel: man(0, 'worldsteel/JISF(人工)', '万吨'),
     ip:    cProd('JPN'),
@@ -110,7 +125,7 @@ export const REGIONS = [
     weup:  man(0, '（人工）', 'GWh'),
   }),
   region({
-    key: 'KR', name: '韩国', en: 'SOUTH KOREA', tier: '一线', reporter: 410, area: 'KOR',
+    key: 'KR', name: '韩国', en: 'SOUTH KOREA', tier: '一线', reporter: 410, area: 'KOR', pmiKey: 'kr',
     china: '造船/汽车/电子用钢大国，与中国互为钢材与中间品贸易方；出口高频反映外需冷暖。',
     steel: man(0, 'worldsteel/KOSA(人工)', '万吨'),
     ip:    cProd('KOR'),

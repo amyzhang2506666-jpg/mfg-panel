@@ -16,7 +16,14 @@
       "Bash(git config *)",
       "Bash(ls \"C:/Users/wenpe/.claude/projects/\" 2>/dev/null | head; echo \"===\"; find \"C:/Users/wenpe/.claude/projects\" -maxdepth 1 -type d 2>/dev/null | head)",
       "Bash(node /tmp/r7.mjs)",
-      "Bash(node -e \"const d=require\\('./data/data.json'\\); for\\(const r of d.regions\\){const cells=[...r.industry,...r.macro,...r.driver]; const a=cells.filter\\(c=>c.auto\\).length; console.log\\(r.name.padEnd\\(10\\), 'auto', a+'/'+cells.length, '| CLI:', JSON.stringify\\(r.macro.find\\(x=>x.nm==='景气先行CLI'\\)?.value\\), '| 出口:', JSON.stringify\\(r.driver.find\\(x=>x.nm==='出口外需'\\)?.value\\), '| 实际利率:', JSON.stringify\\(r.macro.find\\(x=>x.nm==='实际利率'\\)?.value\\)\\);}\")"
+      "Bash(node -e \"const d=require\\('./data/data.json'\\); for\\(const r of d.regions\\){const cells=[...r.industry,...r.macro,...r.driver]; const a=cells.filter\\(c=>c.auto\\).length; console.log\\(r.name.padEnd\\(10\\), 'auto', a+'/'+cells.length, '| CLI:', JSON.stringify\\(r.macro.find\\(x=>x.nm==='景气先行CLI'\\)?.value\\), '| 出口:', JSON.stringify\\(r.driver.find\\(x=>x.nm==='出口外需'\\)?.value\\), '| 实际利率:', JSON.stringify\\(r.macro.find\\(x=>x.nm==='实际利率'\\)?.value\\)\\);}\")",
+      "Bash(echo \"=== call context ===\"; grep -n -i -A18 'url: \"/set-chart\"' /tmp/gc.js | head -40)",
+      "Bash(grep -oiE \"\\(中国|美国|欧元区|德国|日本|chart_data|seriesData|legend|xAxis|dataList\\)[^<]{0,30}\" /tmp/mv.html)",
+      "Bash(curl -s -A \"Mozilla/5.0\" \"https://www.macroview.club/static/js/app/charts/charts.js?v=20250103\")",
+      "Bash(curl -s -c mv_cookies.txt -A \"Mozilla/5.0\" \"https://www.macroview.club/charts?name=country_pmi\" -o mv2.html)",
+      "Bash(grep -oiE \"csrfmiddlewaretoken[^;]{0,80}\" mv2.html)",
+      "Bash(node -e ' *)",
+      "Bash(git push *)"
     ]
   }
 }
